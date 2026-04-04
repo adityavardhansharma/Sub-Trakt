@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Animated, Easing, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, TextInput } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, ChevronRight, Moon, Plus, Sun, Settings, X, List, User, Link, CreditCard, Activity } from "lucide-react-native";
 import { AppThemeProvider, useAppTheme } from "./src/context/AppThemeContext";
 import { getSubscriptions, type Subscription } from "./src/storage/subscriptions";
+import { getProfile, saveProfile, type UserProfile } from "./src/storage/profile";
 import { buildCalendarDays, computeMonthlyTotal, getSubscriptionsForDay, toCalendarDay } from "./src/lib/calendarLogic";
 import { format, isSameDay, addMonths, startOfMonth } from "date-fns";
 import { SubscriptionFormModal } from "./src/components/SubscriptionFormModal";
@@ -36,6 +37,12 @@ function AppContent() {
   const [editingSub, setEditingSub] = useState<Subscription | 'new' | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showAllSubs, setShowAllSubs] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  
+  // Profile form state
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -53,8 +60,23 @@ function AppContent() {
     }).start();
   };
 
-  const reload = useCallback(async () => setSubs(await getSubscriptions()), []);
+  const reload = useCallback(async () => {
+    setSubs(await getSubscriptions());
+    const profile = await getProfile();
+    setProfileData(profile);
+    if (profile) {
+      setEditName(profile.name);
+      setEditEmail(profile.email);
+    }
+  }, []);
+  
   useEffect(() => { reload(); }, [reload]);
+
+  const handleSaveProfile = async () => {
+    const p = { name: editName.trim(), email: editEmail.trim() };
+    await saveProfile(p);
+    setProfileData(p);
+  };
 
   const changeMonth = (delta: number) => {
     Animated.parallel([
@@ -237,26 +259,26 @@ function AppContent() {
         </View>
 
         <View style={styles.panelHeader}>
-          {showAllSubs && (
-            <ScaleButton onPress={() => setShowAllSubs(false)} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised, marginRight: 12 }]}>
+          {(showAllSubs || showProfile) && (
+            <ScaleButton onPress={() => { setShowAllSubs(false); setShowProfile(false); }} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised, marginRight: 12 }]}>
               <ChevronLeft size={17} color={colors.textSecondary} />
             </ScaleButton>
           )}
           <Text style={[styles.panelTitle, { color: colors.text, flex: 1 }]} numberOfLines={1}>
-            {isMenuOpen ? 'Settings' : showAllSubs ? 'All Subscriptions' : (selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Dashboard')}
+            {isMenuOpen ? 'Settings' : showAllSubs ? 'All Subscriptions' : showProfile ? 'Profile' : (selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Dashboard')}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {!isMenuOpen && !showAllSubs && selectedDate && (
+            {!isMenuOpen && !showAllSubs && !showProfile && selectedDate && (
               <Pressable onPress={() => setSelectedDate(null)} hitSlop={12}>
                 <Text style={[styles.clearBtn, { color: colors.accent }]}>Clear</Text>
               </Pressable>
             )}
-            {!isMenuOpen && !showAllSubs && (
+            {!isMenuOpen && !showAllSubs && !showProfile && (
               <ScaleButton onPress={() => setEditingSub('new')} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised }]}>
                 <Plus size={17} color={colors.textSecondary} />
               </ScaleButton>
             )}
-            {!showAllSubs && (
+            {!showAllSubs && !showProfile && (
               <ScaleButton onPress={toggleMenu} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised }]}>
                 {isMenuOpen ? <X size={17} color={colors.textSecondary} /> : <Settings size={17} color={colors.textSecondary} />}
               </ScaleButton>
@@ -274,7 +296,54 @@ function AppContent() {
           }]} pointerEvents={isMenuOpen ? 'none' : 'box-none'}>
 
             <ScrollView showsVerticalScrollIndicator={true} indicatorStyle={resolvedTheme === 'dark' ? 'white' : 'black'} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 80 }}>
-              {showAllSubs ? (
+              {showProfile ? (
+                profileData ? (
+                  <View style={styles.profileContainer}>
+                    <View style={[styles.profileAvatar, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                      <Text style={[styles.profileInitials, { color: colors.text }]}>{profileData.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={[styles.profileName, { color: colors.text }]}>{profileData.name}</Text>
+                    <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>{profileData.email}</Text>
+                    
+                    <ScaleButton onPress={() => setProfileData(null)} style={[styles.editProfileBtn, { backgroundColor: colors.surfaceRaised }]}>
+                      <Text style={[styles.editProfileText, { color: colors.text }]}>Edit Profile</Text>
+                    </ScaleButton>
+                  </View>
+                ) : (
+                  <View style={styles.profileForm}>
+                    <View style={styles.field}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Your Name</Text>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.surfaceRaised, color: colors.text, borderColor: colors.borderSubtle }]}
+                        placeholder="John Doe"
+                        placeholderTextColor={colors.textMuted}
+                        value={editName}
+                        onChangeText={setEditName}
+                        autoCorrect={false}
+                      />
+                    </View>
+                    <View style={styles.field}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Email Address</Text>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.surfaceRaised, color: colors.text, borderColor: colors.borderSubtle }]}
+                        placeholder="john@example.com"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        value={editEmail}
+                        onChangeText={setEditEmail}
+                      />
+                    </View>
+                    <ScaleButton 
+                      onPress={handleSaveProfile} 
+                      style={[styles.primaryBtn, { backgroundColor: colors.text, opacity: (!editName.trim() || !editEmail.trim()) ? 0.5 : 1 }]}
+                    >
+                      <Text style={[styles.primaryBtnText, { color: colors.background }]}>Save Profile</Text>
+                    </ScaleButton>
+                  </View>
+                )
+              ) : showAllSubs ? (
                 subs.length === 0 ? (
                   <View style={styles.emptyState}>
                     <View style={[styles.emptyIcon, { backgroundColor: colors.surfaceRaised }]}>
@@ -329,7 +398,7 @@ function AppContent() {
                 <Text style={[styles.menuLabel, { color: colors.text }]}>All Subscriptions</Text>
               </ScaleButton>
 
-              <ScaleButton style={[styles.menuRow, { backgroundColor: colors.surfaceRaised }]}>
+              <ScaleButton onPress={() => { toggleMenu(); setShowProfile(true); }} style={[styles.menuRow, { backgroundColor: colors.surfaceRaised }]}>
                 <View style={[styles.menuIcon, { backgroundColor: colors.surface }]}>
                   <User size={19} color={colors.textSecondary} />
                 </View>
@@ -624,5 +693,77 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 14,
     letterSpacing: -0.3,
+  },
+
+  /* ── Profile View ── */
+  profileContainer: {
+    alignItems: 'center',
+    paddingTop: 20,
+  },
+  profileAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  profileInitials: {
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 24,
+  },
+  editProfileBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  editProfileText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  profileForm: {
+    paddingTop: 10,
+  },
+  field: {
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    opacity: 0.7,
+  },
+  input: {
+    height: 54,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    borderWidth: 1,
+  },
+  primaryBtn: {
+    height: 54,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  primaryBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
