@@ -35,6 +35,7 @@ function AppContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editingSub, setEditingSub] = useState<Subscription | 'new' | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showAllSubs, setShowAllSubs] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -126,6 +127,24 @@ function AppContent() {
   const cellW = Math.floor((width - 48) / 7);
   const cellH = cellW + 8;
 
+  const renderSubRow = (s: Subscription) => (
+    <ScaleButton key={s.id} onPress={() => setEditingSub(s)} style={[styles.subRow, { backgroundColor: colors.surfaceRaised }]}>
+      <View style={[styles.rowAccent, { backgroundColor: s.cycle === 'monthly' ? colors.monthly : colors.yearly }]} />
+      <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
+        {isRemote(s.logo) ? (
+          <Image source={{ uri: s.logo || undefined }} style={styles.avatarImg} contentFit="contain" />
+        ) : (
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{s.name[0]?.toUpperCase()}</Text>
+        )}
+      </View>
+      <View style={styles.subInfo}>
+        <Text style={[styles.subName, { color: colors.text }]} numberOfLines={1}>{s.name}</Text>
+        <Text style={[styles.subCycle, { color: colors.textSecondary }]}>{s.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</Text>
+      </View>
+      <Text style={[styles.subPrice, { color: colors.text }]}>${s.price.toFixed(2)}</Text>
+    </ScaleButton>
+  );
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <StatusBar style={resolvedTheme === "dark" ? "light" : "dark"} />
@@ -133,9 +152,19 @@ function AppContent() {
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.monthName, { color: colors.text }]}>
+          <Text style={[styles.monthName, { color: colors.text }]}> 
             {format(month, 'MMMM yyyy')}
           </Text>
+        </View>
+        <View style={[styles.premiumBrandIcon, { backgroundColor: resolvedTheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: resolvedTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+          <View style={[styles.sDot, { backgroundColor: colors.text, alignSelf: 'flex-end', marginRight: 4 }]} />
+          <LinearGradient
+            colors={[colors.accent, colors.monthly]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sMinus}
+          />
+          <View style={[styles.sDot, { backgroundColor: colors.text, alignSelf: 'flex-start', marginLeft: 4, opacity: 0.4 }]} />
         </View>
       </View>
 
@@ -208,23 +237,30 @@ function AppContent() {
         </View>
 
         <View style={styles.panelHeader}>
+          {showAllSubs && (
+            <ScaleButton onPress={() => setShowAllSubs(false)} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised, marginRight: 12 }]}>
+              <ChevronLeft size={17} color={colors.textSecondary} />
+            </ScaleButton>
+          )}
           <Text style={[styles.panelTitle, { color: colors.text, flex: 1 }]} numberOfLines={1}>
-            {isMenuOpen ? 'Settings' : (selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Dashboard')}
+            {isMenuOpen ? 'Settings' : showAllSubs ? 'All Subscriptions' : (selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Dashboard')}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {!isMenuOpen && selectedDate && (
+            {!isMenuOpen && !showAllSubs && selectedDate && (
               <Pressable onPress={() => setSelectedDate(null)} hitSlop={12}>
                 <Text style={[styles.clearBtn, { color: colors.accent }]}>Clear</Text>
               </Pressable>
             )}
-            {!isMenuOpen && (
+            {!isMenuOpen && !showAllSubs && (
               <ScaleButton onPress={() => setEditingSub('new')} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised }]}>
                 <Plus size={17} color={colors.textSecondary} />
               </ScaleButton>
             )}
-            <ScaleButton onPress={toggleMenu} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised }]}>
-              {isMenuOpen ? <X size={17} color={colors.textSecondary} /> : <Settings size={17} color={colors.textSecondary} />}
-            </ScaleButton>
+            {!showAllSubs && (
+              <ScaleButton onPress={toggleMenu} style={[styles.iconBtn, { backgroundColor: colors.surfaceRaised }]}>
+                {isMenuOpen ? <X size={17} color={colors.textSecondary} /> : <Settings size={17} color={colors.textSecondary} />}
+              </ScaleButton>
+            )}
           </View>
         </View>
 
@@ -238,23 +274,34 @@ function AppContent() {
           }]} pointerEvents={isMenuOpen ? 'none' : 'box-none'}>
 
             <ScrollView showsVerticalScrollIndicator={true} indicatorStyle={resolvedTheme === 'dark' ? 'white' : 'black'} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 80 }}>
-              {!selectedDate ? (
-                <View style={styles.dashboard}>
-                  <View style={[styles.dashCard, { backgroundColor: colors.surfaceRaised }]}>
-                    <View style={[styles.dashIconBox, { backgroundColor: colors.surface }]}>
-                      <CreditCard size={20} color={colors.accent} />
+              {showAllSubs ? (
+                subs.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={[styles.emptyIcon, { backgroundColor: colors.surfaceRaised }]}>
+                      <List size={22} color={colors.textMuted} />
                     </View>
-                    <Text style={[styles.dashLabel, { color: colors.textSecondary }]}>Monthly Spend</Text>
-                    <Text style={[styles.dashValue, { color: colors.text }]}>${monthTotal.toFixed(2)}</Text>
+                    <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>No subscriptions found</Text>
                   </View>
-                  <View style={[styles.dashCard, { backgroundColor: colors.surfaceRaised }]}>
-                    <View style={[styles.dashIconBox, { backgroundColor: colors.surface }]}>
-                      <Activity size={20} color={colors.monthly} />
+                ) : [...subs].sort((a,b) => b.price - a.price).map(renderSubRow)
+              ) : !selectedDate ? (
+                <>
+                  <View style={styles.dashboard}>
+                    <View style={[styles.dashCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={[styles.dashIconBox, { backgroundColor: colors.surface }]}>
+                        <CreditCard size={20} color={colors.accent} />
+                      </View>
+                      <Text style={[styles.dashLabel, { color: colors.textSecondary }]}>Monthly Spend</Text>
+                      <Text style={[styles.dashValue, { color: colors.text }]}>${monthTotal.toFixed(2)}</Text>
                     </View>
-                    <Text style={[styles.dashLabel, { color: colors.textSecondary }]}>Active Subs</Text>
-                    <Text style={[styles.dashValue, { color: colors.text }]}>{displaySubs.length}</Text>
+                    <View style={[styles.dashCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={[styles.dashIconBox, { backgroundColor: colors.surface }]}>
+                        <Activity size={20} color={colors.monthly} />
+                      </View>
+                      <Text style={[styles.dashLabel, { color: colors.textSecondary }]}>Active Subs</Text>
+                      <Text style={[styles.dashValue, { color: colors.text }]}>{displaySubs.length}</Text>
+                    </View>
                   </View>
-                </View>
+                </>
               ) : displaySubs.length === 0 ? (
                 <View style={styles.emptyState}>
                   <View style={[styles.emptyIcon, { backgroundColor: colors.surfaceRaised }]}>
@@ -263,23 +310,7 @@ function AppContent() {
                   <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>No subscriptions today</Text>
                   <Text style={[styles.emptyHint, { color: colors.textMuted }]}>Tap + to add one</Text>
                 </View>
-              ) : displaySubs.map(s => (
-                <ScaleButton key={s.id} onPress={() => setEditingSub(s)} style={[styles.subRow, { backgroundColor: colors.surfaceRaised }]}>
-                  <View style={[styles.rowAccent, { backgroundColor: s.cycle === 'monthly' ? colors.monthly : colors.yearly }]} />
-                  <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
-                    {isRemote(s.logo) ? (
-                      <Image source={{ uri: s.logo || undefined }} style={styles.avatarImg} contentFit="contain" />
-                    ) : (
-                      <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{s.name[0]?.toUpperCase()}</Text>
-                    )}
-                  </View>
-                  <View style={styles.subInfo}>
-                    <Text style={[styles.subName, { color: colors.text }]} numberOfLines={1}>{s.name}</Text>
-                    <Text style={[styles.subCycle, { color: colors.textSecondary }]}>{s.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</Text>
-                  </View>
-                  <Text style={[styles.subPrice, { color: colors.text }]}>${s.price.toFixed(2)}</Text>
-                </ScaleButton>
-              ))}
+              ) : displaySubs.map(renderSubRow)}
             </ScrollView>
           </Animated.View>
 
@@ -291,7 +322,7 @@ function AppContent() {
             zIndex: isMenuOpen ? 1 : 0
           }]} pointerEvents={isMenuOpen ? 'box-none' : 'none'}>
             <ScrollView showsVerticalScrollIndicator={true} indicatorStyle={resolvedTheme === 'dark' ? 'white' : 'black'} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 80 }}>
-              <ScaleButton onPress={() => toggleMenu()} style={[styles.menuRow, { backgroundColor: colors.surfaceRaised }]}>
+              <ScaleButton onPress={() => { toggleMenu(); setShowAllSubs(true); }} style={[styles.menuRow, { backgroundColor: colors.surfaceRaised }]}>
                 <View style={[styles.menuIcon, { backgroundColor: colors.surface }]}>
                   <List size={19} color={colors.textSecondary} />
                 </View>
@@ -359,6 +390,26 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -1.2,
+  },
+  premiumBrandIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    marginLeft: 12,
+  },
+  sDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  sMinus: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
   },
 
   /* ── Calendar ── */
