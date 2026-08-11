@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   Animated,
   Easing,
-  LayoutAnimation,
   PanResponder,
   Platform,
   Pressable,
